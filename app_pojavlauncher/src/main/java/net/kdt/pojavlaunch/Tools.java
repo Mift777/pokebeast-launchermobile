@@ -101,7 +101,7 @@ import java.util.Map;
 public final class Tools {
     public  static final float BYTE_TO_MB = 1024 * 1024;
     public static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
-    public static String APP_NAME = "PojavLauncher";
+    public static String APP_NAME = "NetPixelmon Launcher";
 
     public static final Gson GLOBAL_GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -116,7 +116,7 @@ public final class Tools {
 
     // New since 3.3.1
     public static String DIR_ACCOUNT_NEW;
-    public static String DIR_GAME_HOME = Environment.getExternalStorageDirectory().getAbsolutePath() + "/games/PojavLauncher";
+    public static String DIR_GAME_HOME = Environment.getExternalStorageDirectory().getAbsolutePath() + "/games/NetPixelmonLauncher";
     public static String DIR_GAME_NEW;
     public static String GAME_PROFILES_FILE;
 
@@ -140,7 +140,7 @@ public final class Tools {
         if(SDK_INT >= 29) {
             return ctx.getExternalFilesDir(null);
         }else{
-            return new File(Environment.getExternalStorageDirectory(),"games/PojavLauncher");
+            return new File(Environment.getExternalStorageDirectory(),"games/NetPixelmonLauncher");
         }
     }
 
@@ -202,7 +202,6 @@ public final class Tools {
         CTRLMAP_PATH = DIR_GAME_HOME + "/controlmap";
         CTRLDEF_FILE = DIR_GAME_HOME + "/controlmap/default.json";
         GAME_PROFILES_FILE = Tools.DIR_GAME_NEW + "/launcher_profiles.json";
-        switchDemo(isDemoProfile(ctx));
     }
 
     /**
@@ -275,8 +274,8 @@ public final class Tools {
         if(LauncherPreferences.PREF_RAM_ALLOCATION > freeDeviceMemory) {
             int finalDeviceMemory = freeDeviceMemory;
             LifecycleAwareAlertDialog.DialogCreator dialogCreator = (dialog, builder) ->
-                builder.setMessage(activity.getString(localeString, finalDeviceMemory, LauncherPreferences.PREF_RAM_ALLOCATION))
-                        .setPositiveButton(android.R.string.ok, (d, w)->{});
+                    builder.setMessage(activity.getString(localeString, finalDeviceMemory, LauncherPreferences.PREF_RAM_ALLOCATION))
+                            .setPositiveButton(android.R.string.ok, (d, w)->{});
 
             if(LifecycleAwareAlertDialog.haltOnDialog(activity.getLifecycle(), activity, dialogCreator)) {
                 return; // If the dialog's lifecycle has ended, return without
@@ -512,8 +511,6 @@ public final class Tools {
         String mcArguments = versionInfo.minecraftArguments == null ?
                 fromStringArray(minecraftArgs.toArray(new String[0])):
                 versionInfo.minecraftArguments;
-
-        if(profile.isDemo()) mcArguments += " --demo";
 
         return JSONUtils.insertJSONValueList(splitAndFilterEmpty(mcArguments), varArgMap);
     }
@@ -1390,7 +1387,7 @@ public final class Tools {
 
     /** Checks if the renderer Id is compatible with the current device */
     public static boolean checkRendererCompatible(Context context, String rendererName) {
-         return getCompatibleRenderers(context).rendererIds.contains(rendererName);
+        return getCompatibleRenderers(context).rendererIds.contains(rendererName);
     }
 
     /** Releases the cache of compatible renderers. */
@@ -1415,27 +1412,5 @@ public final class Tools {
                         Log.w(Tools.APP_NAME, "Could not enable System.exit() method!", th);
                     }
                 }).show();
-    }
-
-    public static void switchDemo(boolean isDemo){
-        if(isDemo) {
-            DIR_GAME_NEW = DIR_DATA + "/demo/.minecraft";
-        } else {
-            DIR_GAME_NEW = DIR_GAME_HOME + "/.minecraft";
-        }
-        DIR_HOME_VERSION = DIR_GAME_NEW + "/versions";
-        DIR_HOME_LIBRARY = DIR_GAME_NEW + "/libraries";
-        ASSETS_PATH = DIR_GAME_NEW + "/assets";
-        OBSOLETE_RESOURCES_PATH = DIR_GAME_NEW + "/resources";
-    }
-
-    public static boolean isDemoProfile(Context ctx){
-        MinecraftAccount currentProfile = PojavProfile.getCurrentProfileContent(ctx, null);
-        return currentProfile != null && currentProfile.isDemo();
-    }
-
-    public static boolean isLocalProfile(Context ctx){
-        MinecraftAccount currentProfile = PojavProfile.getCurrentProfileContent(ctx, null);
-        return currentProfile == null || currentProfile.isLocal();
     }
 }

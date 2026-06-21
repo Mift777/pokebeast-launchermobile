@@ -5,8 +5,6 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -16,19 +14,19 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
-
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.AppCompatSpinner;
 import androidx.core.content.res.ResourcesCompat;
-
-
 import net.kdt.pojavlaunch.PojavProfile;
 import net.kdt.pojavlaunch.R;
 import net.kdt.pojavlaunch.Tools;
@@ -41,14 +39,11 @@ import net.kdt.pojavlaunch.extra.ExtraConstants;
 import net.kdt.pojavlaunch.extra.ExtraCore;
 import net.kdt.pojavlaunch.extra.ExtraListener;
 import net.kdt.pojavlaunch.value.MinecraftAccount;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-
-import fr.spse.extended_view.ExtendedTextView;
 
 public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.OnItemSelectedListener {
     public mcAccountSpinner(@NonNull Context context) {
@@ -68,9 +63,6 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
     /* Current animator to for the login bar, is swapped when changing step */
     private ObjectAnimator mLoginBarAnimator;
     private float mLoginBarWidth = -1;
-
-    /* Paint used to display the bottom bar, to show the login progress. */
-    private final Paint mLoginBarPaint = new Paint();
 
     /* When a login is performed in the background, we need to know where we are */
     private final static int MAX_LOGIN_STEP = 5;
@@ -105,7 +97,6 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
     };
 
     private final ErrorListener mErrorListener = errorMessage -> {
-        mLoginBarPaint.setColor(Color.RED);
         Context context = getContext();
         if(errorMessage instanceof PresentedException) {
             PresentedException exception = (PresentedException) errorMessage;
@@ -123,7 +114,6 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
 
     /* Triggered when we need to do microsoft login */
     private final ExtraListener<Uri> mMicrosoftLoginListener = (key, value) -> {
-        mLoginBarPaint.setColor(getResources().getColor(R.color.minebutton_color));
         new MicrosoftBackgroundLogin(false, value.getQueryParameter("code")).performLogin(
                 mProgressListener, mDoneListener, mErrorListener);
         return false;
@@ -148,11 +138,6 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
 
     @SuppressLint("ClickableViewAccessibility")
     private void init(){
-        // Set visual properties
-        setBackgroundColor(getResources().getColor(R.color.background_status_bar));
-        mLoginBarPaint.setColor(getResources().getColor(R.color.minebutton_color));
-        mLoginBarPaint.setStrokeWidth(getResources().getDimensionPixelOffset(R.dimen._2sdp));
-
         // Set behavior
         reloadAccounts(true, 0);
         setOnItemSelectedListener(this);
@@ -183,9 +168,6 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
     @Override
     protected void onDraw(Canvas canvas) {
         if(mLoginBarWidth == -1) mLoginBarWidth = getWidth(); // Initial draw
-
-        float bottom = getHeight() - mLoginBarPaint.getStrokeWidth()/2;
-        canvas.drawLine(0, bottom, mLoginBarWidth, bottom, mLoginBarPaint);
     }
 
     public void removeCurrentAccount(){
@@ -278,7 +260,6 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
     private void performLogin(MinecraftAccount minecraftAccount){
         if(minecraftAccount.isLocal()) return;
 
-        mLoginBarPaint.setColor(getResources().getColor(R.color.minebutton_color));
         if(minecraftAccount.isMicrosoft){
             if(System.currentTimeMillis() > minecraftAccount.expiresAt){
                 // Perform login only if needed
@@ -327,15 +308,16 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
         if(mSelectecAccount != null){
             View layout = getSelectedView();
             if(layout != null){
-                ExtendedTextView view = layout.findViewById(R.id.account_item);
+                ImageView accountImage = layout.findViewById(R.id.account_image);
+                accountImage.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+                accountImage.setClipToOutline(true);
                 Bitmap bitmap = mSelectecAccount.getSkinFace();
                 if(bitmap != null) {
                     mHeadDrawable = new BitmapDrawable(getResources(), bitmap);
-                    view.setCompoundDrawables(mHeadDrawable, null, null, null);
+                    accountImage.setImageDrawable(mHeadDrawable);
                 }else{
-                    view.setCompoundDrawables(null, null, null, null);
+                    accountImage.setImageDrawable(null);
                 }
-                view.postProcessDrawables();
             }
         }
 
@@ -357,13 +339,18 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
                 convertView = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_minecraft_account, parent, false);
             }
 
-            ExtendedTextView textview = convertView.findViewById(R.id.account_item);
+            TextView textview = convertView.findViewById(R.id.account_item);
+            ImageView accountImage = convertView.findViewById(R.id.account_image);
+            accountImage.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+            accountImage.setClipToOutline(true);
             ImageView deleteButton = convertView.findViewById(R.id.delete_account_button);
             textview.setText(super.getItem(position));
+            ImageView arrowDropdown = convertView.findViewById(R.id.arrow_dropdown);
+            arrowDropdown.setVisibility(View.GONE);
 
             // Handle the "Add account section"
             if(position == 0) {
-                textview.setCompoundDrawables(ResourcesCompat.getDrawable(parent.getResources(), R.drawable.ic_add, null), null, null, null);
+                accountImage.setImageDrawable(ResourcesCompat.getDrawable(parent.getResources(), R.drawable.ic_add, null));
                 deleteButton.setVisibility(View.GONE);
             }
             else {
@@ -373,13 +360,17 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
                     accountHead = new BitmapDrawable(parent.getResources(), MinecraftAccount.getSkinFace(username));
                     mImageCache.put(username, accountHead);
                 }
-                textview.setCompoundDrawables(accountHead, null, null, null);
+                accountImage.setImageDrawable(accountHead);
 
                 deleteButton.setVisibility(View.VISIBLE);
                 deleteButton.setOnClickListener(v -> {
                     showDeleteDialog(getContext(), position);
                 });
             }
+
+            LinearLayout layoutAccount = convertView.findViewById(R.id.layout_account);
+            layoutAccount.setPadding(0, 10, 0, 10);
+
             return convertView;
         }
 
@@ -390,6 +381,13 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
         public View getView(int position, View convertView, @NonNull ViewGroup parent) {
             View view = getDropDownView(position, convertView, parent);
             view.findViewById(R.id.delete_account_button).setVisibility(View.GONE);
+
+            ImageView arrowDropdown = view.findViewById(R.id.arrow_dropdown);
+            arrowDropdown.setVisibility(View.VISIBLE);
+
+            LinearLayout layoutAccount = view.findViewById(R.id.layout_account);
+            layoutAccount.setPadding(0, 0, 0, 0);
+
             return view;
         }
 
@@ -404,7 +402,4 @@ public class mcAccountSpinner extends AppCompatSpinner implements AdapterView.On
                     .show();
         }
     }
-
-
-
 }

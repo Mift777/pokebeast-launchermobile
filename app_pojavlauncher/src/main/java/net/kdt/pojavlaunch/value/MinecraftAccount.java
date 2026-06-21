@@ -34,7 +34,7 @@ public class MinecraftAccount {
     void updateSkinFace(String uuid) {
         try {
             File skinFile = getSkinFaceFile(username);
-            Tools.downloadFile("https://mc-heads.net/head/" + uuid + "/100", skinFile.getAbsolutePath());
+            Tools.downloadFile("https://mc-heads.net/avatar/" + uuid + "/100", skinFile.getAbsolutePath());
             
             Log.i("SkinLoader", "Update skin face success");
         } catch (IOException e) {
@@ -45,11 +45,7 @@ public class MinecraftAccount {
     }
 
     public boolean isLocal(){
-        return accessToken.equals("0") && !username.startsWith("Demo.");
-    }
-
-    public boolean isDemo(){
-        return username.startsWith("Demo.");
+        return accessToken.equals("0");
     }
     
     public void updateSkinFace() {

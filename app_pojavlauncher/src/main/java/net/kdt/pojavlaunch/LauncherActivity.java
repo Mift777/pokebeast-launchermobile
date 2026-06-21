@@ -4,6 +4,7 @@ import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import android.Manifest;
 import android.app.NotificationManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -43,16 +44,21 @@ import net.kdt.pojavlaunch.services.ProgressServiceKeeper;
 import net.kdt.pojavlaunch.tasks.AsyncMinecraftDownloader;
 import net.kdt.pojavlaunch.tasks.AsyncVersionList;
 import net.kdt.pojavlaunch.tasks.MinecraftDownloader;
-import net.kdt.pojavlaunch.utils.DateUtils;
+import net.kdt.pojavlaunch.utils.DownloadUtils;
 import net.kdt.pojavlaunch.utils.NotificationUtils;
 import net.kdt.pojavlaunch.value.launcherprofiles.LauncherProfiles;
 import net.kdt.pojavlaunch.value.launcherprofiles.MinecraftProfile;
 
+import java.io.File;
 import java.lang.ref.WeakReference;
-import java.text.ParseException;
 
 public class LauncherActivity extends BaseActivity {
     public static final String SETTING_FRAGMENT_TAG = "SETTINGS_FRAGMENT";
+    public static boolean MODPACK_DOWNLOAD_FINISH = false;
+
+    private static final String POKEBEAST_INSTANCE_URL = "http://pokebeast.infinityfreeapp.com/instances?instance=Pokebeast";
+    private static final String POKEBEAST_MC_VERSION = "1.21.1";
+    private static final String POKEBEAST_FABRIC_LOADER = "0.16.10";
 
     public final ActivityResultLauncher<Object> modInstallerLauncher =
             registerForActivityResult(new OpenDocumentWithExtension("jar"), (data)->{
@@ -61,18 +67,24 @@ public class LauncherActivity extends BaseActivity {
 
     private mcAccountSpinner mAccountSpinner;
     private FragmentContainerView mFragmentView;
+    private ImageButton mHomeButton;
+    private ImageButton mTiktokButton;
+    private ImageButton mDiscordButton;
     private ImageButton mSettingsButton;
     private ProgressLayout mProgressLayout;
     private ProgressServiceKeeper mProgressServiceKeeper;
     private ModloaderInstallTracker mInstallTracker;
     private NotificationManager mNotificationManager;
+    private String mSelectedProfile;
 
     /* Allows to switch from one button "type" to another */
     private final FragmentManager.FragmentLifecycleCallbacks mFragmentCallbackListener = new FragmentManager.FragmentLifecycleCallbacks() {
         @Override
         public void onFragmentResumed(@NonNull FragmentManager fm, @NonNull Fragment f) {
-            mSettingsButton.setImageDrawable(ContextCompat.getDrawable(getBaseContext(), f instanceof MainMenuFragment
-                    ? R.drawable.ic_menu_settings : R.drawable.ic_menu_home));
+            mHomeButton.setImageDrawable(ContextCompat.getDrawable(getBaseContext(), f instanceof MainMenuFragment
+                    ? R.drawable.ic_menu_home_active : R.drawable.ic_menu_home));
+            mSettingsButton.setImageDrawable(ContextCompat.getDrawable(getBaseContext(), f instanceof LauncherPreferenceFragment
+                    ? R.drawable.ic_menu_settings_active : R.drawable.ic_menu_settings));
         }
     };
 
@@ -92,64 +104,67 @@ public class LauncherActivity extends BaseActivity {
         return false;
     };
 
-    /* Listener for the settings fragment */
-    private final View.OnClickListener mSettingButtonListener = v -> {
-        Fragment fragment = getSupportFragmentManager().findFragmentById(mFragmentView.getId());
-        if(fragment instanceof MainMenuFragment){
-            Tools.swapFragment(this, LauncherPreferenceFragment.class, SETTING_FRAGMENT_TAG, null);
-        } else{
-            // The setting button doubles as a home button now
-            Tools.backToMainMenu(this);
-        }
-    };
-
     private final ExtraListener<Boolean> mLaunchGameListener = (key, value) -> {
         if(mProgressLayout.hasProcesses()){
             Toast.makeText(this, R.string.tasks_ongoing, Toast.LENGTH_LONG).show();
             return false;
         }
 
-        String selectedProfile = LauncherPreferences.DEFAULT_PREF.getString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE,"");
-        if (LauncherProfiles.mainProfileJson == null || !LauncherProfiles.mainProfileJson.profiles.containsKey(selectedProfile)){
-            Toast.makeText(this, R.string.error_no_version, Toast.LENGTH_LONG).show();
-            return false;
-        }
-        MinecraftProfile prof = LauncherProfiles.mainProfileJson.profiles.get(selectedProfile);
-        if (prof == null || prof.lastVersionId == null || "Unknown".equals(prof.lastVersionId)){
-            Toast.makeText(this, R.string.error_no_version, Toast.LENGTH_LONG).show();
-            return false;
-        }
-
+        mAccountSpinner = findViewById(R.id.account_spinner);
         if(mAccountSpinner.getSelectedAccount() == null){
             Toast.makeText(this, R.string.no_saved_accounts, Toast.LENGTH_LONG).show();
             ExtraCore.setValue(ExtraConstants.SELECT_AUTH_METHOD, true);
             return false;
         }
-        String normalizedVersionId = AsyncMinecraftDownloader.normalizeVersionId(prof.lastVersionId);
-        JMinecraftVersionList.Version mcVersion = AsyncMinecraftDownloader.getListedVersion(normalizedVersionId);
 
-        // Do not load when is a modded version or older than minecraft 1.3 on demo account
-        if (mAccountSpinner.getSelectedAccount().isDemo()) {
-            boolean isOlderThan13 = true;
+        LauncherProfiles.load();
 
-            if (mcVersion != null) {
-                try {
-                    isOlderThan13 = DateUtils.dateBefore(DateUtils.parseReleaseDate(mcVersion.releaseTime), 2012, 6, 22);
-                } catch (ParseException ignored) {}
-            }
-
-            if (isOlderThan13) {
-                Toast.makeText(this, R.string.toast_not_available_demo, Toast.LENGTH_LONG).show();
-                return false;
+        for (String profileName : LauncherProfiles.mainProfileJson.profiles.keySet()) {
+            MinecraftProfile prof = LauncherProfiles.mainProfileJson.profiles.get(profileName);
+            if (prof != null && prof.name.toLowerCase().contains("fabric")) {
+                mSelectedProfile = profileName;
+                break;
             }
         }
 
-        new MinecraftDownloader().start(
-                this,
-                mcVersion,
-                normalizedVersionId,
-                new ContextAwareDoneListener(this, normalizedVersionId)
-        );
+        boolean hasDefaultProfile = LauncherProfiles.mainProfileJson != null &&
+                LauncherProfiles.mainProfileJson.profiles != null &&
+                LauncherProfiles.mainProfileJson.profiles.containsKey(mSelectedProfile);
+
+        if(!hasDefaultProfile) {
+            Toast.makeText(this, "Instalando modpack padrão...", Toast.LENGTH_SHORT).show();
+
+            installDefaultModpack(success -> {
+                if (success) {
+                    launchGameAfterModpackInstall(mSelectedProfile);
+                } else {
+                    Toast.makeText(LauncherActivity.this, "Falha na instalação do modpack padrão.", Toast.LENGTH_SHORT).show();
+                }
+            });
+        } else {
+            checkModpackVersion((updated, newVersion) -> {
+                if (updated) {
+                    launchGameAfterModpackInstall(mSelectedProfile);
+                } else {
+                    Toast.makeText(LauncherActivity.this, "Atualizando modpack.", Toast.LENGTH_SHORT).show();
+                    installDefaultModpack(success -> {
+                        if (success) {
+                            LauncherPreferences.DEFAULT_PREF.edit()
+                                    .putString(
+                                            LauncherPreferences.PREF_MODPACK_VERSION,
+                                            newVersion
+                                    )
+                                    .apply();
+
+                            launchGameAfterModpackInstall(mSelectedProfile);
+                        } else {
+                            Toast.makeText(LauncherActivity.this, "Falha na instalação do modpack padrão.", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
+            });
+        }
+
         return false;
     };
 
@@ -179,6 +194,7 @@ public class LauncherActivity extends BaseActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         setContentView(R.layout.activity_pojav_launcher);
         FragmentManager fragmentManager = getSupportFragmentManager();
         // If we don't have a back stack root yet...
@@ -211,7 +227,10 @@ public class LauncherActivity extends BaseActivity {
         ProgressKeeper.addTaskCountListener(mDoubleLaunchPreventionListener);
         ProgressKeeper.addTaskCountListener((mProgressServiceKeeper = new ProgressServiceKeeper(this)));
 
-        mSettingsButton.setOnClickListener(mSettingButtonListener);
+        mHomeButton.setOnClickListener(v -> Tools.swapFragment(this, MainMenuFragment.class, MainMenuFragment.TAG, null));
+        mTiktokButton.setOnClickListener(v -> Tools.openURL(this, getString(R.string.tiktok_invite)));
+        mDiscordButton.setOnClickListener(v -> Tools.openURL(this, getString(R.string.discord_invite)));
+        mSettingsButton.setOnClickListener(v -> Tools.swapFragment(this, LauncherPreferenceFragment.class, SETTING_FRAGMENT_TAG, null));
         ProgressKeeper.addTaskCountListener(mProgressLayout);
         ExtraCore.addExtraListener(ExtraConstants.BACK_PREFERENCE, mBackPreferenceListener);
         ExtraCore.addExtraListener(ExtraConstants.SELECT_AUTH_METHOD, mSelectAuthMethod);
@@ -353,8 +372,204 @@ public class LauncherActivity extends BaseActivity {
     /** Stuff all the view boilerplate here */
     private void bindViews(){
         mFragmentView = findViewById(R.id.container_fragment);
+        mHomeButton = findViewById(R.id.home_button);
+        mTiktokButton = findViewById(R.id.tiktok_button);
+        mDiscordButton = findViewById(R.id.discord_button);
         mSettingsButton = findViewById(R.id.setting_button);
         mAccountSpinner = findViewById(R.id.account_spinner);
         mProgressLayout = findViewById(R.id.progress_layout);
+    }
+
+    public interface ModpackInstallListener {
+        void onInstallComplete(boolean success);
+    }
+
+    private static class PokebeastFile {
+        String url;
+        String hash;
+        String path;
+        long size;
+    }
+
+    private String getModpackVersion(String manifest) {
+        return Integer.toHexString(manifest.hashCode());
+    }
+
+    private File getMinecraftHome() {
+        return new File(Tools.DIR_GAME_HOME, ".minecraft");
+    }
+
+    private void downloadPokebeastFiles(String manifest) throws Exception {
+        PokebeastFile[] files = Tools.GLOBAL_GSON.fromJson(manifest, PokebeastFile[].class);
+        if (files == null) return;
+
+        File instanceDestination = getMinecraftHome();
+        byte[] buffer = new byte[65535];
+        int total = files.length;
+
+        for (int index = 0; index < total; index++) {
+            PokebeastFile file = files[index];
+            if (file == null || file.url == null || file.path == null) continue;
+
+            File outputFile = new File(instanceDestination, file.path);
+            int progress = total == 0 ? 0 : (int) (((float) index / (float) total) * 100f);
+            final int fileNumber = index + 1;
+            final int fileProgress = progress;
+            ProgressKeeper.submitProgress(
+                    ProgressLayout.INSTALL_MODPACK,
+                    fileProgress,
+                    R.string.modpack_download_downloading_mods_fc,
+                    fileNumber,
+                    total
+            );
+
+            DownloadUtils.ensureSha1(outputFile, file.hash, () -> {
+                DownloadUtils.downloadFileMonitored(file.url, outputFile, buffer, (current, max) ->
+                        ProgressKeeper.submitProgress(
+                                ProgressLayout.INSTALL_MODPACK,
+                                fileProgress,
+                                R.string.modpack_download_downloading_mods_fc,
+                                fileNumber,
+                                total
+                        )
+                );
+                return null;
+            });
+        }
+
+        ProgressKeeper.submitProgress(ProgressLayout.INSTALL_MODPACK, 100, R.string.modpack_download_downloading_mods_fc, total, total);
+    }
+
+    private void installDefaultModpack(ModpackInstallListener listener) {
+        LauncherProfiles.load();
+
+        new Thread(() -> {
+            try {
+                String manifest = DownloadUtils.downloadString(POKEBEAST_INSTANCE_URL);
+                String newVersion = getModpackVersion(manifest);
+
+                ModloaderInstaller loaderInstaller = new ModloaderInstaller(this, ModloaderInstaller.LoaderType.FABRIC);
+                loaderInstaller.installLoader(POKEBEAST_MC_VERSION, POKEBEAST_FABRIC_LOADER);
+
+                boolean loaderInstalled = false;
+                while (!loaderInstalled) {
+                    try {
+                        LauncherProfiles.load();
+                        for (String profileName : LauncherProfiles.mainProfileJson.profiles.keySet()) {
+                            MinecraftProfile prof = LauncherProfiles.mainProfileJson.profiles.get(profileName);
+                            if (prof != null && prof.name.toLowerCase().contains("fabric")) {
+                                mSelectedProfile = profileName;
+                                loaderInstalled = true;
+                            }
+                        }
+
+                        Thread.sleep(500);
+                    } catch (InterruptedException ignored) {
+                    }
+                }
+
+                downloadPokebeastFiles(manifest);
+
+                LauncherPreferences.DEFAULT_PREF.edit()
+                        .putString(
+                                LauncherPreferences.PREF_KEY_CURRENT_PROFILE,
+                                mSelectedProfile
+                        )
+                        .putString(
+                                LauncherPreferences.PREF_MODPACK_VERSION,
+                                newVersion
+                        )
+                        .apply();
+
+                boolean installSuccess = true;
+
+                runOnUiThread(() -> {
+                    if (listener != null) {
+                        listener.onInstallComplete(installSuccess);
+                    }
+                });
+            } catch (Exception e) {
+                boolean installSuccess = false;
+
+                e.printStackTrace();
+                runOnUiThread(() -> {
+                    if (listener != null) {
+                        listener.onInstallComplete(installSuccess);
+                    }
+
+                    Toast.makeText(
+                            this,
+                            "Falha ao baixar client",
+                            Toast.LENGTH_LONG
+                    ).show();
+                });
+            }
+        }).start();
+    }
+
+    public interface ModpackVersionListener {
+        void onCheckComplete(boolean success, String newVersion);
+    }
+
+    private void checkModpackVersion(ModpackVersionListener listener) {
+        new Thread(() -> {
+            try {
+                String manifest = DownloadUtils.downloadString(POKEBEAST_INSTANCE_URL);
+                String newVersion = getModpackVersion(manifest);
+
+                String modpackVersion = LauncherPreferences.DEFAULT_PREF.getString(LauncherPreferences.PREF_MODPACK_VERSION, "");
+                boolean updated = modpackVersion.equals(newVersion);
+
+                runOnUiThread(() -> {
+                    if (listener != null) {
+                        listener.onCheckComplete(updated, newVersion);
+                    }
+                });
+            } catch (Exception e) {
+                boolean updated = false;
+
+                e.printStackTrace();
+                runOnUiThread(() -> {
+                    if (listener != null) {
+                        listener.onCheckComplete(updated, "");
+                    }
+
+                    Toast.makeText(
+                            this,
+                            "Falha ao checar atualização do modpack",
+                            Toast.LENGTH_LONG
+                    ).show();
+                });
+            }
+        }).start();
+    }
+
+    private void launchGameAfterModpackInstall(String profileName) {
+        LauncherProfiles.load();
+        MinecraftProfile prof = LauncherProfiles.mainProfileJson != null && LauncherProfiles.mainProfileJson.profiles != null
+                ? LauncherProfiles.mainProfileJson.profiles.get(profileName)
+                : null;
+
+        if (prof == null || prof.lastVersionId == null || "Unknown".equals(prof.lastVersionId)) {
+            Toast.makeText(this, R.string.error_no_version, Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        LauncherPreferences.DEFAULT_PREF.edit()
+                .putString(
+                        LauncherPreferences.PREF_KEY_CURRENT_PROFILE,
+                        mSelectedProfile
+                )
+                .apply();
+
+        String normalizedVersionId = AsyncMinecraftDownloader.normalizeVersionId(prof.lastVersionId);
+        JMinecraftVersionList.Version mcVersion = AsyncMinecraftDownloader.getListedVersion(normalizedVersionId);
+
+        new MinecraftDownloader().start(
+                this,
+                mcVersion,
+                normalizedVersionId,
+                new ContextAwareDoneListener(this, normalizedVersionId)
+        );
     }
 }

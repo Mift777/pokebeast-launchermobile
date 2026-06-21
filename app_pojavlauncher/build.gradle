@@ -90,7 +90,7 @@ configurations {
 android {
     namespace 'net.kdt.pojavlaunch'
 
-    compileSdk = 34
+    compileSdk = 35
 
     lintOptions {
         abortOnError false
@@ -112,7 +112,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "net.kdt.pojavlaunch"
+        applicationId "br.com.netpixelmon.launch"
         minSdkVersion 21
         targetSdkVersion 34
         versionCode getDateSeconds()
@@ -128,9 +128,9 @@ android {
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.customDebug
-            resValue 'string', 'application_package', 'net.kdt.pojavlaunch.debug'
-            resValue 'string', 'storageProviderAuthorities', 'net.kdt.pojavlaunch.scoped.gamefolder.debug'
-            resValue 'string', 'shareProviderAuthority', 'net.kdt.pojavlaunch.scoped.controlfolder.debug'
+            resValue 'string', 'application_package', 'br.com.netpixelmon.launch.debug'
+            resValue 'string', 'storageProviderAuthorities', 'br.com.netpixelmon.launch.scoped.gamefolder.debug'
+            resValue 'string', 'shareProviderAuthority', 'br.com.netpixelmon.launch.scoped.controlfolder.debug'
         }
         proguard {
             initWith debug
@@ -149,8 +149,8 @@ android {
             // defaultConfig already set
             // multiDexEnabled = true
             // debuggable = true
-            resValue 'string', 'storageProviderAuthorities', 'net.kdt.pojavlaunch.scoped.gamefolder'
-            resValue 'string', 'application_package', 'net.kdt.pojavlaunch'
+            resValue 'string', 'storageProviderAuthorities', 'br.com.netpixelmon.launch.scoped.gamefolder'
+            resValue 'string', 'application_package', 'br.com.netpixelmon.launch'
         }
         gplay {
             initWith release
@@ -215,6 +215,8 @@ dependencies {
     implementation 'com.github.Mathias-Boulay:ExtendedView:1.0.0'
     implementation 'com.github.Mathias-Boulay:android_gamepad_remapper:2.0.3'
     implementation 'com.github.Mathias-Boulay:virtual-joystick-android:1.14'
+
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 
     // implementation 'com.intuit.sdp:sdp-android:1.0.5'
     // implementation 'com.intuit.ssp:ssp-android:1.0.5'
